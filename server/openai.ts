@@ -1,15 +1,14 @@
-export interface GeminiSettings {
+export interface OpenAISettings {
   apiKey?: string
-  endpoint?: string
   model?: string
 }
 
-export class GeminiApiError extends Error {
+export class OpenAIApiError extends Error {
   readonly statusCode: number
 
   constructor(message: string, statusCode: number, options?: ErrorOptions) {
     super(message, options)
-    this.name = 'GeminiApiError'
+    this.name = 'OpenAIApiError'
     this.statusCode = statusCode
   }
 }
@@ -27,8 +26,8 @@ interface ReflectionContext {
   recentCheckIns: ReflectionContext['checkIn'][]
 }
 
-interface GeminiResponse {
-  candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>
+interface OpenAIResponse {
+  choices?: Array<{ message?: { content?: string | null } }>
   error?: { message?: string }
 }
 
@@ -38,53 +37,64 @@ interface ReflectionOutput {
   suggestions?: string[]
 }
 
-export interface GeminiReflectionResult {
+export interface OpenAIReflectionResult {
   noticed: string
   patterns: string
   suggestions: string[]
 }
 
-export async function generateGeminiReflection(input: unknown, settings: GeminiSettings): Promise<GeminiReflectionResult> {
+export async function generateOpenAIReflection(input: unknown, settings: OpenAISettings): Promise<OpenAIReflectionResult> {
   const apiKey = settings.apiKey
-  if (!apiKey || apiKey === 'YOUR_GEMINI_API_KEY') {
-    throw new GeminiApiError('Google Gemini is not configured on the server. Add GEMINI_API_KEY, then retry.', 503)
+  if (!apiKey || apiKey === 'YOUR_OPENAI_API_KEY') {
+    throw new OpenAIApiError('OpenAI is not configured on the server. Add OPENAI_API_KEY, then retry.', 503)
   }
 
   const reflectionContext = normalizeContext(input)
-  const endpoint = (settings.endpoint || 'https://generativelanguage.googleapis.com/v1beta/models').replace(/\/$/, '')
-  const model = settings.model || 'gemini-2.5-flash'
+  const model = settings.model || 'gpt-4o-mini'
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), 25_000)
 
   try {
-    const response = await fetch(`${endpoint}/${encodeURIComponent(model)}:generateContent`, {
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
       body: JSON.stringify({
-        systemInstruction: {
-          parts: [{
-            text: 'You are GlowGuide, a kind and non-medical skin reflection coach. Based only on the user’s recorded observations, return a JSON object with three fields: noticed (a warm observation), patterns (a cautious possible pattern or an empty string), and suggestions (an array of gentle everyday habit ideas). Never diagnose, make medical claims, recommend treatments, or claim a product caused a change. Clearly avoid certainty. Keep suggestions simple and supportive.',
-          }],
-        },
-        contents: [{ role: 'user', parts: [{ text: JSON.stringify(reflectionContext) }] }],
-        generationConfig: { responseMimeType: 'application/json', maxOutputTokens: 512 },
+        model,
+        messages: [
+          {
+            role: 'system',
+            content: 'You are GlowGuide, a kind and non-medical skin reflection coach. Based only on the user’s recorded observations, return a JSON object with three fields: noticed (a warm observation), patterns (a cautious possible pattern or an empty string), and suggestions (an array of gentle everyday habit ideas). Never diagnose, make medical claims, recommend treatments, or claim a product caused a change. Clearly avoid certainty. Keep suggestions simple and supportive.',
+          },
+          { role: 'user', content: JSON.stringify(reflectionContext) },
+        ],
+        response_format: { type: 'json_object' },
+        max_tokens: 512,
       }),
       signal: controller.signal,
     })
 
-    const result = await response.json() as GeminiResponse
-    if (!response.ok) throw new GeminiApiError(result.error?.message || `Google Gemini returned an error (${response.status}). Please retry.`, 502)
-    const outputText = result.candidates?.[0]?.content?.parts?.map((part) => part.text ?? '').join('').trim()
-    if (!outputText) throw new GeminiApiError('Google Gemini returned no reflection. Please retry.', 502)
+    const result = await response.json() as OpenAIResponse
+    if (!response.ok) {
+      if (response.status === 429) {
+        throw new OpenAIApiError('OpenAI API usage limit reached. Check your API usage and billing, then retry.', 429)
+      }
+      throw new OpenAIApiError(result.error?.message || `OpenAI returned an error (${response.status}). Please retry.`, 502)
+    }
+
+    const outputText = result.choices?.[0]?.message?.content?.trim()
+    if (!outputText) throw new OpenAIApiError('OpenAI returned no reflection. Please retry.', 502)
 
     let output: ReflectionOutput
     try {
       output = JSON.parse(outputText) as ReflectionOutput
     } catch (error) {
-      throw new GeminiApiError('Google Gemini returned an unreadable reflection. Please retry.', 502, { cause: error })
+      throw new OpenAIApiError('OpenAI returned an unreadable reflection. Please retry.', 502, { cause: error })
     }
     if (typeof output.noticed !== 'string' || !output.noticed.trim()) {
-      throw new GeminiApiError('Google Gemini returned an unexpected response. Please retry.', 502)
+      throw new OpenAIApiError('OpenAI returned an unexpected response. Please retry.', 502)
     }
     return {
       noticed: output.noticed.slice(0, 2000),
@@ -94,27 +104,27 @@ export async function generateGeminiReflection(input: unknown, settings: GeminiS
         : [],
     }
   } catch (error) {
-    if (error instanceof GeminiApiError) throw error
+    if (error instanceof OpenAIApiError) throw error
     if (error instanceof Error && error.name === 'AbortError') {
-      throw new GeminiApiError('Google Gemini took too long to respond. Please retry.', 504)
+      throw new OpenAIApiError('OpenAI took too long to respond. Please retry.', 504)
     }
-    throw new GeminiApiError('Could not reach Google Gemini. Check the server connection and retry.', 502, { cause: error })
+    throw new OpenAIApiError('Could not reach OpenAI. Check the server connection and retry.', 502, { cause: error })
   } finally {
     clearTimeout(timeout)
   }
 }
 
 function normalizeContext(input: unknown): ReflectionContext {
-  if (!input || typeof input !== 'object') throw new GeminiApiError('The reflection request is invalid.', 400)
+  if (!input || typeof input !== 'object') throw new OpenAIApiError('The reflection request is invalid.', 400)
   const raw = input as Record<string, unknown>
-  if (JSON.stringify(input).length > 16_000) throw new GeminiApiError('The reflection request is too large.', 413)
+  if (JSON.stringify(input).length > 16_000) throw new OpenAIApiError('The reflection request is too large.', 413)
 
   const profile = raw.profile && typeof raw.profile === 'object' ? raw.profile as Record<string, unknown> : null
   const checkIn = raw.checkIn && typeof raw.checkIn === 'object' ? raw.checkIn as Record<string, unknown> : null
-  if (!profile || !checkIn) throw new GeminiApiError('The reflection request is missing profile or check-in details.', 400)
+  if (!profile || !checkIn) throw new OpenAIApiError('The reflection request is missing profile or check-in details.', 400)
   const requiredValues = ['date', 'condition', 'feeling', 'mood']
   if (requiredValues.some((field) => typeof checkIn[field] !== 'string' || !checkIn[field])) {
-    throw new GeminiApiError('The check-in needs a date, condition, feeling, and mood.', 400)
+    throw new OpenAIApiError('The check-in needs a date, condition, feeling, and mood.', 400)
   }
 
   return {

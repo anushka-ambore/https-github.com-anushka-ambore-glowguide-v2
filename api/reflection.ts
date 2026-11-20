@@ -1,4 +1,4 @@
-import { generateGeminiReflection, GeminiApiError } from '../server/gemini.js'
+import { generateOpenAIReflection, OpenAIApiError } from '../server/openai.js'
 
 interface VercelRequest {
   method?: string
@@ -41,14 +41,13 @@ export default async function handler(request: VercelRequest, response: VercelRe
   try {
     const input = typeof request.body === 'string' ? JSON.parse(request.body) as unknown : request.body
     const env = (globalThis as typeof globalThis & NodeEnvironment).process?.env ?? {}
-    const result = await generateGeminiReflection(input, {
-      apiKey: env.GEMINI_API_KEY,
-      endpoint: env.GEMINI_API_ENDPOINT,
-      model: env.GEMINI_MODEL,
+    const result = await generateOpenAIReflection(input, {
+      apiKey: env.OPENAI_API_KEY,
+      model: env.OPENAI_MODEL,
     })
     send(response, 200, result)
   } catch (error) {
-    const statusCode = error instanceof GeminiApiError ? error.statusCode : error instanceof SyntaxError ? 400 : 500
+    const statusCode = error instanceof OpenAIApiError ? error.statusCode : error instanceof SyntaxError ? 400 : 500
     const message = error instanceof Error ? error.message : 'Could not generate the reflection.'
     send(response, statusCode, { error: message })
   }
