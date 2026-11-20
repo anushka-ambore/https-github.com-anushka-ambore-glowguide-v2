@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { CheckInForm } from './components/CheckInForm'
 import { Icon, type IconName } from './components/Icon'
-import { requestOpenAIReflection } from './services/openaiAI'
+import { requestGroqReflection } from './services/groqAI'
 import { clearAppData, loadAppData, saveAppData } from './storage/localStorage'
 import type { AppData, CheckIn, Product, Profile, Reflection } from './types'
 import './App.css'
@@ -111,7 +111,7 @@ function App() {
       ...current.filter((reflection) => reflection.checkInId !== entry.id),
     ])
     try {
-      const result = await requestOpenAIReflection(profile, entry, sortedCheckIns.filter((item) => item.id !== entry.id).slice(0, 4), products)
+      const result = await requestGroqReflection(profile, entry, sortedCheckIns.filter((item) => item.id !== entry.id).slice(0, 4), products)
       if (requestVersion !== reflectionRequestVersion.current) return
       setReflections((current) => [
         { checkInId: entry.id, ...result, status: 'complete', createdAt: new Date().toISOString() },
@@ -341,7 +341,7 @@ function EmptyState({ text }: { text: string }) {
 
 function DeleteDataPanel({ onDelete }: { onDelete: () => void }) {
   return <section className="danger-zone">
-    <div><h2>Delete your data</h2><p>Remove your saved profile, check-ins, reflections, products, and photos from this browser. This won't delete information already sent to OpenAI.</p></div>
+    <div><h2>Delete your data</h2><p>Remove your saved profile, check-ins, reflections, products, and photos from this browser. This won't delete information already sent to Groq.</p></div>
     <button className="danger-button" type="button" onClick={onDelete}>Delete all my data</button>
   </section>
 }

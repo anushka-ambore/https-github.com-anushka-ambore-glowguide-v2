@@ -1,14 +1,14 @@
-export interface OpenAISettings {
+export interface GroqSettings {
   apiKey?: string
   model?: string
 }
 
-export class OpenAIApiError extends Error {
+export class GroqApiError extends Error {
   readonly statusCode: number
 
   constructor(message: string, statusCode: number, options?: ErrorOptions) {
     super(message, options)
-    this.name = 'OpenAIApiError'
+    this.name = 'GroqApiError'
     this.statusCode = statusCode
   }
 }
@@ -26,7 +26,7 @@ interface ReflectionContext {
   recentCheckIns: ReflectionContext['checkIn'][]
 }
 
-interface OpenAIResponse {
+interface GroqResponse {
   choices?: Array<{ message?: { content?: string | null } }>
   error?: { message?: string }
 }
@@ -37,25 +37,25 @@ interface ReflectionOutput {
   suggestions?: string[]
 }
 
-export interface OpenAIReflectionResult {
+export interface GroqReflectionResult {
   noticed: string
   patterns: string
   suggestions: string[]
 }
 
-export async function generateOpenAIReflection(input: unknown, settings: OpenAISettings): Promise<OpenAIReflectionResult> {
+export async function generateGroqReflection(input: unknown, settings: GroqSettings): Promise<GroqReflectionResult> {
   const apiKey = settings.apiKey
-  if (!apiKey || apiKey === 'YOUR_OPENAI_API_KEY') {
-    throw new OpenAIApiError('OpenAI is not configured on the server. Add OPENAI_API_KEY, then retry.', 503)
+  if (!apiKey || apiKey === 'YOUR_GROQ_API_KEY') {
+    throw new GroqApiError('Groq is not configured on the server. Add GROQ_API_KEY, then retry.', 503)
   }
 
   const reflectionContext = normalizeContext(input)
-  const model = settings.model || 'gpt-4o-mini'
+  const model = settings.model || 'openai/gpt-oss-20b'
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), 25_000)
 
   try {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -71,30 +71,30 @@ export async function generateOpenAIReflection(input: unknown, settings: OpenAIS
           { role: 'user', content: JSON.stringify(reflectionContext) },
         ],
         response_format: { type: 'json_object' },
-        max_tokens: 512,
+        max_completion_tokens: 512,
       }),
       signal: controller.signal,
     })
 
-    const result = await response.json() as OpenAIResponse
+    const result = await response.json() as GroqResponse
     if (!response.ok) {
       if (response.status === 429) {
-        throw new OpenAIApiError('OpenAI API usage limit reached. Check your API usage and billing, then retry.', 429)
+        throw new GroqApiError('Groq API usage limit reached. Check your Groq usage and limits, then retry.', 429)
       }
-      throw new OpenAIApiError(result.error?.message || `OpenAI returned an error (${response.status}). Please retry.`, 502)
+      throw new GroqApiError(result.error?.message || `Groq returned an error (${response.status}). Please retry.`, 502)
     }
 
     const outputText = result.choices?.[0]?.message?.content?.trim()
-    if (!outputText) throw new OpenAIApiError('OpenAI returned no reflection. Please retry.', 502)
+    if (!outputText) throw new GroqApiError('Groq returned no reflection. Please retry.', 502)
 
     let output: ReflectionOutput
     try {
       output = JSON.parse(outputText) as ReflectionOutput
     } catch (error) {
-      throw new OpenAIApiError('OpenAI returned an unreadable reflection. Please retry.', 502, { cause: error })
+      throw new GroqApiError('Groq returned an unreadable reflection. Please retry.', 502, { cause: error })
     }
     if (typeof output.noticed !== 'string' || !output.noticed.trim()) {
-      throw new OpenAIApiError('OpenAI returned an unexpected response. Please retry.', 502)
+      throw new GroqApiError('Groq returned an unexpected response. Please retry.', 502)
     }
     return {
       noticed: output.noticed.slice(0, 2000),
@@ -104,27 +104,27 @@ export async function generateOpenAIReflection(input: unknown, settings: OpenAIS
         : [],
     }
   } catch (error) {
-    if (error instanceof OpenAIApiError) throw error
+    if (error instanceof GroqApiError) throw error
     if (error instanceof Error && error.name === 'AbortError') {
-      throw new OpenAIApiError('OpenAI took too long to respond. Please retry.', 504)
+      throw new GroqApiError('Groq took too long to respond. Please retry.', 504)
     }
-    throw new OpenAIApiError('Could not reach OpenAI. Check the server connection and retry.', 502, { cause: error })
+    throw new GroqApiError('Could not reach Groq. Check the server connection and retry.', 502, { cause: error })
   } finally {
     clearTimeout(timeout)
   }
 }
 
 function normalizeContext(input: unknown): ReflectionContext {
-  if (!input || typeof input !== 'object') throw new OpenAIApiError('The reflection request is invalid.', 400)
+  if (!input || typeof input !== 'object') throw new GroqApiError('The reflection request is invalid.', 400)
   const raw = input as Record<string, unknown>
-  if (JSON.stringify(input).length > 16_000) throw new OpenAIApiError('The reflection request is too large.', 413)
+  if (JSON.stringify(input).length > 16_000) throw new GroqApiError('The reflection request is too large.', 413)
 
   const profile = raw.profile && typeof raw.profile === 'object' ? raw.profile as Record<string, unknown> : null
   const checkIn = raw.checkIn && typeof raw.checkIn === 'object' ? raw.checkIn as Record<string, unknown> : null
-  if (!profile || !checkIn) throw new OpenAIApiError('The reflection request is missing profile or check-in details.', 400)
+  if (!profile || !checkIn) throw new GroqApiError('The reflection request is missing profile or check-in details.', 400)
   const requiredValues = ['date', 'condition', 'feeling', 'mood']
   if (requiredValues.some((field) => typeof checkIn[field] !== 'string' || !checkIn[field])) {
-    throw new OpenAIApiError('The check-in needs a date, condition, feeling, and mood.', 400)
+    throw new GroqApiError('The check-in needs a date, condition, feeling, and mood.', 400)
   }
 
   return {

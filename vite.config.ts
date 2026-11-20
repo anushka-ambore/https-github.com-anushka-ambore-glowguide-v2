@@ -1,6 +1,6 @@
 import react from '@vitejs/plugin-react'
 import { loadEnv, type Plugin, defineConfig } from 'vite'
-import { generateOpenAIReflection, OpenAIApiError } from './server/openai.js'
+import { generateGroqReflection, GroqApiError } from './server/groq.js'
 
 function localReflectionApi(): Plugin {
   return {
@@ -21,19 +21,19 @@ function localReflectionApi(): Plugin {
           for await (const chunk of request) {
             const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
             bytes += buffer.length
-            if (bytes > 16_000) throw new OpenAIApiError('The reflection request is too large.', 413)
+            if (bytes > 16_000) throw new GroqApiError('The reflection request is too large.', 413)
             chunks.push(buffer)
           }
           const input: unknown = JSON.parse(Buffer.concat(chunks).toString('utf8'))
-          const result = await generateOpenAIReflection(input, {
-            apiKey: env.OPENAI_API_KEY,
-            model: env.OPENAI_MODEL,
+          const result = await generateGroqReflection(input, {
+            apiKey: env.GROQ_API_KEY,
+            model: env.GROQ_MODEL,
           })
           response.statusCode = 200
           response.setHeader('Content-Type', 'application/json')
           response.end(JSON.stringify(result))
         } catch (error) {
-          const statusCode = error instanceof OpenAIApiError ? error.statusCode : error instanceof SyntaxError ? 400 : 500
+          const statusCode = error instanceof GroqApiError ? error.statusCode : error instanceof SyntaxError ? 400 : 500
           const message = error instanceof Error ? error.message : 'Could not generate the reflection.'
           response.statusCode = statusCode
           response.setHeader('Content-Type', 'application/json')

@@ -1,4 +1,4 @@
-import { generateOpenAIReflection, OpenAIApiError } from '../server/openai.js'
+import { generateGroqReflection, GroqApiError } from '../server/groq.js'
 
 interface VercelRequest {
   method?: string
@@ -41,13 +41,13 @@ export default async function handler(request: VercelRequest, response: VercelRe
   try {
     const input = typeof request.body === 'string' ? JSON.parse(request.body) as unknown : request.body
     const env = (globalThis as typeof globalThis & NodeEnvironment).process?.env ?? {}
-    const result = await generateOpenAIReflection(input, {
-      apiKey: env.OPENAI_API_KEY,
-      model: env.OPENAI_MODEL,
+    const result = await generateGroqReflection(input, {
+      apiKey: env.GROQ_API_KEY,
+      model: env.GROQ_MODEL,
     })
     send(response, 200, result)
   } catch (error) {
-    const statusCode = error instanceof OpenAIApiError ? error.statusCode : error instanceof SyntaxError ? 400 : 500
+    const statusCode = error instanceof GroqApiError ? error.statusCode : error instanceof SyntaxError ? 400 : 500
     const message = error instanceof Error ? error.message : 'Could not generate the reflection.'
     send(response, statusCode, { error: message })
   }

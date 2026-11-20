@@ -1,16 +1,16 @@
 import type { CheckIn, Product, Profile } from '../types'
 
-export interface OpenAIReflectionResult {
+export interface GroqReflectionResult {
   noticed: string
   patterns: string
   suggestions: string[]
 }
 
-interface ReflectionApiResponse extends Partial<OpenAIReflectionResult> {
+interface ReflectionApiResponse extends Partial<GroqReflectionResult> {
   error?: string
 }
 
-export async function requestOpenAIReflection(profile: Profile, checkIn: CheckIn, recentCheckIns: CheckIn[], products: Product[]): Promise<OpenAIReflectionResult> {
+export async function requestGroqReflection(profile: Profile, checkIn: CheckIn, recentCheckIns: CheckIn[], products: Product[]): Promise<GroqReflectionResult> {
   const reflectionContext = {
     profile: { skinType: profile.skinType, concerns: profile.concerns },
     checkIn: {
@@ -52,7 +52,7 @@ export async function requestOpenAIReflection(profile: Profile, checkIn: CheckIn
     }
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') {
-      throw new Error('OpenAI took too long to respond. Your check-in is saved; please retry.', { cause: error })
+      throw new Error('Groq took too long to respond. Your check-in is saved; please retry.', { cause: error })
     }
     if (error instanceof Error && !(error instanceof TypeError)) throw error
     throw new Error('Could not reach the reflection service. Check your connection and server configuration, then retry.', { cause: error })
