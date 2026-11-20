@@ -1,11 +1,22 @@
-import type { IncomingMessage, ServerResponse } from 'node:http'
-import { generateGeminiReflection, GeminiApiError } from '../server/gemini.ts'
+import { generateGeminiReflection, GeminiApiError } from '../server/gemini.js'
 
-interface VercelRequest extends IncomingMessage {
+interface VercelRequest {
+  method?: string
+  headers: Record<string, string | string[] | undefined>
   body?: unknown
 }
 
-export default async function handler(request: VercelRequest, response: ServerResponse): Promise<void> {
+interface VercelResponse {
+  statusCode: number
+  setHeader(name: string, value: string): void
+  end(data?: string): void
+}
+
+interface NodeEnvironment {
+  process?: { env?: Record<string, string | undefined> }
+}
+
+export default async function handler(request: VercelRequest, response: VercelResponse): Promise<void> {
   response.setHeader('Content-Type', 'application/json')
   if (request.method !== 'POST') {
     response.setHeader('Allow', 'POST')
@@ -28,15 +39,12 @@ export default async function handler(request: VercelRequest, response: ServerRe
   }
 
   try {
-    const input = request.body === undefined
-      ? await readJsonBody(request)
-      : typeof request.body === 'string'
-        ? JSON.parse(request.body) as unknown
-        : request.body
+    const input = typeof request.body === 'string' ? JSON.parse(request.body) as unknown : request.body
+    const env = (globalThis as typeof globalThis & NodeEnvironment).process?.env ?? {}
     const result = await generateGeminiReflection(input, {
-      apiKey: process.env.GEMINI_API_KEY,
-      endpoint: process.env.GEMINI_API_ENDPOINT,
-      model: process.env.GEMINI_MODEL,
+      apiKey: env.GEMINI_API_KEY,
+      endpoint: env.GEMINI_API_ENDPOINT,
+      model: env.GEMINI_MODEL,
     })
     send(response, 200, result)
   } catch (error) {
@@ -46,19 +54,7 @@ export default async function handler(request: VercelRequest, response: ServerRe
   }
 }
 
-async function readJsonBody(request: IncomingMessage): Promise<unknown> {
-  const chunks: Buffer[] = []
-  let bytes = 0
-  for await (const chunk of request) {
-    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
-    bytes += buffer.length
-    if (bytes > 16_000) throw new GeminiApiError('The reflection request is too large.', 413)
-    chunks.push(buffer)
-  }
-  return JSON.parse(Buffer.concat(chunks).toString('utf8'))
-}
-
-function send(response: ServerResponse, statusCode: number, body: unknown): void {
+function send(response: VercelResponse, statusCode: number, body: unknown): void {
   response.statusCode = statusCode
   response.end(JSON.stringify(body))
 }

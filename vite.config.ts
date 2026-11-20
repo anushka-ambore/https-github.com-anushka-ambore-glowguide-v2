@@ -1,6 +1,6 @@
 import react from '@vitejs/plugin-react'
 import { loadEnv, type Plugin, defineConfig } from 'vite'
-import { generateGeminiReflection, GeminiApiError } from './server/gemini.ts'
+import { generateGeminiReflection, GeminiApiError } from './server/gemini.js'
 
 function localReflectionApi(): Plugin {
   return {
