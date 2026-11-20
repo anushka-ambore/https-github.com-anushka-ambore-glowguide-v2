@@ -70,8 +70,24 @@ export async function generateGroqReflection(input: unknown, settings: GroqSetti
           },
           { role: 'user', content: JSON.stringify(reflectionContext) },
         ],
-        response_format: { type: 'json_object' },
-        max_completion_tokens: 512,
+        response_format: {
+          type: 'json_schema',
+          json_schema: {
+            name: 'skin_reflection',
+            strict: true,
+            schema: {
+              type: 'object',
+              properties: {
+                noticed: { type: 'string' },
+                patterns: { type: 'string' },
+                suggestions: { type: 'array', items: { type: 'string' } },
+              },
+              required: ['noticed', 'patterns', 'suggestions'],
+              additionalProperties: false,
+            },
+          },
+        },
+        max_completion_tokens: 1024,
       }),
       signal: controller.signal,
     })
