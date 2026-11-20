@@ -6,8 +6,8 @@ export interface GroqSettings {
 export class GroqApiError extends Error {
   readonly statusCode: number
 
-  constructor(message: string, statusCode: number, options?: ErrorOptions) {
-    super(message, options)
+  constructor(message: string, statusCode: number) {
+    super(message)
     this.name = 'GroqApiError'
     this.statusCode = statusCode
   }
@@ -106,8 +106,8 @@ export async function generateGroqReflection(input: unknown, settings: GroqSetti
     let output: ReflectionOutput
     try {
       output = JSON.parse(outputText) as ReflectionOutput
-    } catch (error) {
-      throw new GroqApiError('Groq returned an unreadable reflection. Please retry.', 502, { cause: error })
+    } catch {
+      throw new GroqApiError('Groq returned an unreadable reflection. Please retry.', 502)
     }
     if (typeof output.noticed !== 'string' || !output.noticed.trim()) {
       throw new GroqApiError('Groq returned an unexpected response. Please retry.', 502)
@@ -124,7 +124,7 @@ export async function generateGroqReflection(input: unknown, settings: GroqSetti
     if (error instanceof Error && error.name === 'AbortError') {
       throw new GroqApiError('Groq took too long to respond. Please retry.', 504)
     }
-    throw new GroqApiError('Could not reach Groq. Check the server connection and retry.', 502, { cause: error })
+    throw new GroqApiError('Could not reach Groq. Check the server connection and retry.', 502)
   } finally {
     clearTimeout(timeout)
   }

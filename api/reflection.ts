@@ -26,7 +26,11 @@ export default async function handler(request: VercelRequest, response: VercelRe
 
   const origin = request.headers.origin
   const host = request.headers.host
-  if (origin && host) {
+  if (origin !== undefined) {
+    if (typeof origin !== 'string' || typeof host !== 'string') {
+      send(response, 403, { error: 'Cross-origin reflection requests are not allowed.' })
+      return
+    }
     try {
       if (new URL(origin).host !== host) {
         send(response, 403, { error: 'Cross-origin reflection requests are not allowed.' })
